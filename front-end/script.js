@@ -27,27 +27,24 @@ function updateDevice(data) {
   document.getElementById("wifi_rssi").textContent = data.wifi_rssi;
   document.getElementById("device_status").textContent = data.status;
 }
-async function fetchSecurity() {
-  const res = await fetch("/api/security/latest");
-  const data = await res.json();
-  if (data.success) {
-    document.getElementById("security_event").textContent =
-      data.data.event_type;
-    document.getElementById("security_location").textContent =
-      data.data.location;
-  }
+
+// ✅ Fungsi update untuk Security - menggunakan pattern yang sama
+function updateSecurity(data) {
+  document.getElementById("security_event").textContent =
+    data.event_type || "-";
+  document.getElementById("security_location").textContent =
+    data.location || "-";
 }
 
-async function fetchAlert() {
-  const res = await fetch("/api/alerts/latest");
-  const data = await res.json();
-  if (data.success) {
-    document.getElementById("alert_title").textContent = data.data.title;
-    document.getElementById("alert_message").textContent = data.data.message;
-  }
+// ✅ Fungsi update untuk Alert - menggunakan pattern yang sama
+function updateAlert(data) {
+  document.getElementById("alert_title").textContent = data.title || "-";
+  document.getElementById("alert_message").textContent = data.message || "-";
 }
 
+// ✅ Fungsi refreshDashboard yang sudah terintegrasi
 async function refreshDashboard() {
+  // Fetch semua data menggunakan method yang sama
   const sensor = await fetchData("sensors/latest");
   if (sensor?.success) updateSensor(sensor.data);
 
@@ -57,10 +54,18 @@ async function refreshDashboard() {
   const device = await fetchData("devices/status");
   if (device?.success) updateDevice(device.data);
 
+  // ✅ Tambahkan security dan alert ke dalam refreshDashboard
+  const security = await fetchData("security/latest");
+  if (security?.success) updateSecurity(security.data);
+
+  const alert = await fetchData("alerts/latest");
+  if (alert?.success) updateAlert(alert.data);
+
   document.getElementById(
     "timestamp"
   ).textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
 }
+
 async function setLight(mode) {
   await fetch(`${BASE_URL}/control/lights`, {
     method: "POST",
@@ -85,13 +90,9 @@ async function setLock(mode) {
   });
 }
 
-// Auto refresh every 5 seconds
-refreshDashboard();
-setInterval(refreshDashboard, 5000);
-
+// ✅ Inisialisasi yang sudah diperbaiki
 window.onload = () => {
   refreshDashboard();
-  fetchSecurity();
-  fetchAlert();
+  // Auto refresh every 5 seconds - hanya perlu satu setInterval
   setInterval(refreshDashboard, 5000);
 };

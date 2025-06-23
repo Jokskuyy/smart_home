@@ -1,36 +1,60 @@
-const BaseController = require("./BaseController");
+// controllers/AlertController.js
 const AlertModel = require("../models/AlertModel");
 
-class AlertController extends BaseController {
+class AlertController {
   async getAlerts(req, res) {
     try {
-      const limit = parseInt(req.query.limit) || 50;
-      const unreadOnly = req.query.unread === "true";
+      const alerts = await AlertModel.findAll({
+        order: "timestamp DESC",
+        limit: req.query.limit || 10,
+      });
 
-      let data;
-      if (unreadOnly) {
-        const [rows] = await AlertModel.db.execute(
-          "SELECT * FROM alerts WHERE is_read = FALSE ORDER BY created_at DESC LIMIT ?",
-          [limit]
-        );
-        data = rows;
-      } else {
-        data = await AlertModel.findHistory(limit);
-      }
-
-      this.handleSuccess(res, data);
+      res.json({
+        success: true,
+        data: alerts,
+        count: alerts.length,
+      });
     } catch (error) {
-      this.handleError(res, error);
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+
+  // ✅ Method baru untuk mengambil alert terakhir
+  async getLatestAlert(req, res) {
+    try {
+      const latest = await AlertModel.findLatest();
+
+      res.json({
+        success: true,
+        data: latest || {
+          title: "No alerts",
+          message: "No recent alerts",
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
     }
   }
 
   async markAsRead(req, res) {
     try {
-      const id = req.params.id;
-      await AlertModel.markAsRead(id);
-      this.handleSuccess(res, null, "Alert marked as read");
+      await AlertModel.markAsRead(req.params.id);
+
+      res.json({
+        success: true,
+        message: "Alert marked as read",
+      });
     } catch (error) {
-      this.handleError(res, error);
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
     }
   }
 }
