@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Home Dashboard</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>🏡 Smart Home Dashboard</h1>
+      <p id="timestamp">Loading...</p>
+    </header>
+
+    <main>
+      <section class="card" id="sensor-section">
+        <h2>🔥 Gas Sensor</h2>
+        <p>Level: <span id="gas_level">-</span></p>
+        <p>PPM: <span id="gas_ppm">-</span></p>
+        <p>Status: <span id="fire_status">-</span></p>
+      </section>
+
+      <section class="card" id="climate-section">
+        <h2>🌡️ Climate</h2>
+        <p>Temperature: <span id="temperature">-</span> °C</p>
+        <p>Humidity: <span id="humidity">-</span>%</p>
+      </section>
+
+      <section class="card" id="device-section">
+        <h2>📶 Device Status</h2>
+        <p>WiFi Signal: <span id="wifi_rssi">-</span> dBm</p>
+        <p>Status: <span id="device_status">-</span></p>
+      </section>
+      <section class="card" id="security-section">
+        <h2>🔒 Keamanan</h2>
+        <p>Event: <span id="security_event">-</span></p>
+        <p>Lokasi: <span id="security_location">-</span></p>
+      </section>
+
+      <section class="card" id="alert-section">
+        <h2>🚨 Notifikasi</h2>
+        <p>Judul: <span id="alert_title">-</span></p>
+        <p>Pesan: <span id="alert_message">-</span></p>
+      </section>
+
+      <section class="card" id="control-section">
+        <h2>🕹️ Kontrol Manual</h2>
+
+        <h3>Lampu</h3>
+        <button onclick="setLight('on')">ON</button>
+        <button onclick="setLight('off')">OFF</button>
+        <button onclick="setLight('auto')">AUTO</button>
+
+        <h3>Kipas</h3>
+        <button onclick="setFan('on')">ON</button>
+        <button onclick="setFan('off')">OFF</button>
+        <button onclick="setFan('auto')">AUTO</button>
+
+        <h3>Kunci Pintu</h3>
+        <button onclick="setLock('lock')">KUNCI</button>
+        <button onclick="setLock('unlock')">BUKA</button>
+      </section>
+    </main>
+
+    <footer>
+      <p>&copy; 2025 SmartHome IoT</p>
+    </footer>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
