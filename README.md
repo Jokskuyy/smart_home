@@ -8,7 +8,8 @@ Project ini adalah sistem monitoring dan kontrol **Smart Home berbasis IoT** men
 
 - Deteksi gas (MQ2), suhu dan kelembapan (DHT22), gerakan (PIR)
 - Sistem notifikasi otomatis: kebakaran & keamanan
-- Kontrol lampu, kipas, dan smart lock (mode ON, OFF, AUTO)
+- Kontrol lampu, dan kipas (mode ON, OFF, AUTO)
+- Kontrol smart lock (LOCK, UNLOCK)
 - Dashboard web real-time (HTML, CSS, JS)
 - Komunikasi data menggunakan **MQTT**
 
