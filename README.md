@@ -19,12 +19,11 @@ Project ini adalah sistem monitoring dan kontrol **Smart Home berbasis IoT** men
 1. **Buat Project baru** di [Wokwi](https://wokwi.com/)
 2. Pilih **Board: ESP32 Dev Module**
 3. Pilih **Framework: Arduino**
-4. Upload file `sketch.ino` Anda
+4. Upload file `sketch.ino`  dan `diagram.json` yang tersedia di repository
 5. Tambahkan **chip custom MQ2**:
    - Buat dua file:
      - `mq2.chip.json`
      - `mq2.chip.c`
-   - Ikuti dokumentasi Wokwi untuk mengaktifkan chip ini
 6. Pastikan kredensial MQTT di `sketch.ino` sudah benar (gunakan akun pribadi HiveMQ jika perlu)
 7. Jalankan Project dan pastikan ESP32 berhasil terhubung ke MQTT
 
