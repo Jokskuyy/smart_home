@@ -1,0 +1,574 @@
+/*
+ * ============================================================================
+ * SMART HOME SYSTEM - ESP32 + Wokwi + Custom MQ2 Chip + MQTT Backend
+ * ============================================================================
+ * Versi: 1.3.1 (Perbaikan Konektivitas & ID)
+ * Fitur:
+ * • Sistem Alarm Kebakaran dengan Sensor Gas MQ2
+ * • Deteksi Gerakan (Pintu & Ruangan) dengan status 'detected' & 'cleared'
+ * • Kontrol Lampu Otomatis
+ * • Kontrol Iklim (Suhu & Kelembaban)
+ * • Sistem Kunci Pintar
+ * • Mode Hemat Energi
+ * • Jam Waktu Nyata (RTC DS1307)
+ * • Komunikasi MQTT
+ * ============================================================================
+ */
+
+// ============================================================================
+// LIBRARY INCLUDES
+// ============================================================================
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <DHT.h>
+#include <ESP32Servo.h>
+#include <Wire.h>
+#include <TimeLib.h>
+#include <ArduinoJson.h>
+
+// ============================================================================
+// NETWORK CONFIGURATION
+// ============================================================================
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
+
+// MQTT configuration
+const char* mqtt_server = "broker.hivemq.com";
+const int mqtt_port = 1883;
+// <<< PERUBAHAN 1: Ganti Client ID agar konsisten dengan Frontend & Backend
+const char* mqtt_client_id = "ESP32_SMARTHOME_WOKWI";
+
+// ============================================================================
+// MQTT TOPICS
+// ============================================================================
+const char* TOPIC_SENSORS        = "smarthome/sensors/data";
+const char* TOPIC_CLIMATE        = "smarthome/climate/data";
+const char* TOPIC_SECURITY       = "smarthome/security/data";
+const char* TOPIC_STATUS         = "smarthome/status";
+const char* TOPIC_ALERTS         = "smarthome/alerts";
+const char* TOPIC_RESPONSE       = "smarthome/response";
+const char* TOPIC_LIGHTS_CONTROL = "smarthome/control/lights";
+const char* TOPIC_FAN_CONTROL    = "smarthome/control/fan";
+const char* TOPIC_LOCK_CONTROL   = "smarthome/control/lock";
+
+// ============================================================================
+// PIN DEFINITIONS
+// ============================================================================
+#define MQ2_ANALOG_PIN   34
+#define MQ2_DIGITAL_PIN  5
+#define PIR_DOOR_PIN     2
+#define PIR_ROOM_PIN     18
+#define DHT_PIN          15
+#define BUZZER_PIN       12
+#define FIRE_LED_PIN     13
+#define CAMERA_LED_PIN   14
+#define LIGHT_LED_PIN    27
+#define FAN_LED_PIN      26
+#define SERVO_PIN        25
+#define SDA_PIN          21
+#define SCL_PIN          22
+
+// ============================================================================
+// SENSOR & MODULE CONFIGURATIONS
+// ============================================================================
+#define DHT_TYPE DHT22
+#define DS1307_I2C_ADDRESS 0x68
+
+// ============================================================================
+// GLOBAL OBJECTS
+// ============================================================================
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
+DHT dht(DHT_PIN, DHT_TYPE);
+Servo doorLock;
+
+// ============================================================================
+// SYSTEM STATE VARIABLES
+// ============================================================================
+bool fireAlarmActive = false;
+float gasVoltage = 0.0;
+int gasLevel = 0;
+int gasPercentage = 0;
+float gasPPM = 0.0;
+bool digitalGasDetected = false;
+int lastDoorMotionState = LOW;
+int lastRoomMotionState = LOW;
+unsigned long lastMotionTimeRoom = 0;
+float temperature = 25.0;
+float humidity = 60.0;
+bool fanAutoMode = true;
+bool lightAutoMode = true;
+bool lockStatus = false;
+int currentHour = 12;
+int currentMinute = 0;
+String currentTimeString = "12:00";
+unsigned long lastSensorRead = 0;
+unsigned long lastMqttReconnectAttempt = 0;
+unsigned long lastStatusPublish = 0;
+
+// ============================================================================
+// FUNCTION PROTOTYPES
+// ============================================================================
+void connectToWiFi();
+void connectToMqtt();
+void mqttCallback(char* topic, byte* payload, unsigned int length);
+void handleControlCommands(const char* topic, JsonDocument& doc);
+void handleLightControl(const char* action);
+void handleFanControl(const char* action);
+void handleLockControl(const char* action);
+void handleBackendResponse(JsonDocument& doc);
+void checkAllSensors();
+void readMQ2GasSensor();
+void checkFireAlarmSystem();
+void readMotionSensors();
+void readClimateData();
+void controlFanByTemperature();
+void autoLightControl();
+void checkEnergySavingMode();
+void setDS1307Time(byte second, byte minute, byte hour, byte dayOfWeek, byte dayOfMonth, byte month, byte year);
+void readDS1307Time(int* hour, int* minute);
+void updateCurrentTime();
+void publishSensorData();
+void publishDeviceStatus();
+void publishSecurityEvent(const char* eventType, const char* status, const char* location);
+void publishAlert(const char* alertType, const char* priority, const char* title, const char* message, JsonObject metadata = JsonObject());
+void initializePins();
+byte decToBcd(byte val);
+byte bcdToDec(byte val);
+
+// ============================================================================
+// MAIN SETUP FUNCTION
+// ============================================================================
+void setup() {
+  Serial.begin(115200);
+  Serial.println("\n" + String('=', 50));
+  Serial.println("🏠 SMART HOME SYSTEM INITIALIZING (v1.3.1)");
+  Serial.println(String('=', 50));
+  
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(200);
+  digitalWrite(BUZZER_PIN, LOW);
+  Serial.println("🔊 Buzzer test completed.");
+  
+  Wire.begin(SDA_PIN, SCL_PIN);
+  Serial.println("⏰ I2C initialized for RTC.");
+  
+  initializePins();
+  Serial.println("📌 All GPIO pins initialized.");
+  
+  dht.begin();
+  Serial.println("🌡️ DHT22 sensor initialized.");
+  
+  doorLock.attach(SERVO_PIN);
+  doorLock.write(0);
+  Serial.println("🔓 Smart lock initialized (unlocked).");
+  
+  setDS1307Time(0, 30, 12, 1, 1, 1, 24);
+  Serial.println("⏰ RTC time initialized to 12:30.");
+  
+  connectToWiFi();
+  
+  mqttClient.setServer(mqtt_server, mqtt_port);
+  mqttClient.setCallback(mqttCallback);
+  Serial.println("📡 MQTT client configured.");
+  
+  Serial.println(String('=', 50));
+  Serial.println("✅ SMART HOME SYSTEM READY!");
+  Serial.println("🌐 MQTT Broker: " + String(mqtt_server) + ":" + String(mqtt_port));
+  Serial.print("   Client ID: ");
+  Serial.println(mqtt_client_id);
+  Serial.println("   Monitoring topics for commands and data...");
+  Serial.println(String('=', 50));
+  
+  // Penundaan singkat untuk memastikan koneksi stabil sebelum publish pertama
+  delay(1000); 
+  publishDeviceStatus();
+}
+
+// ============================================================================
+// MAIN LOOP FUNCTION
+// ============================================================================
+void loop() {
+  if (!mqttClient.connected()) {
+    connectToMqtt();
+  }
+  mqttClient.loop();
+  
+  updateCurrentTime();
+
+  if (millis() - lastSensorRead > 2000) {
+    checkAllSensors();
+    publishSensorData();
+    lastSensorRead = millis();
+  }
+  
+  if (millis() - lastStatusPublish > 30000) {
+    publishDeviceStatus();
+    lastStatusPublish = millis();
+  }
+  
+  autoLightControl();
+  checkEnergySavingMode();
+  
+  delay(100);
+}
+
+// ============================================================================
+// NETWORK FUNCTIONS IMPLEMENTATION
+// ============================================================================
+void connectToWiFi() {
+    Serial.print("🔗 Menghubungkan ke WiFi: ");
+    Serial.println(ssid);
+    WiFi.begin(ssid, password);
+    unsigned long connectStartTime = millis();
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+        if (millis() - connectStartTime > 10000) {
+            Serial.println("\n⚠️ Koneksi WiFi timeout. Mencoba lagi...");
+            connectStartTime = millis();
+            WiFi.begin(ssid, password);
+        }
+    }
+    Serial.println("\n✅ WiFi Terhubung!");
+    Serial.print("📶 Alamat IP: ");
+    Serial.println(WiFi.localIP());
+}
+
+void connectToMqtt() {
+    if (millis() - lastMqttReconnectAttempt > 5000) {
+        lastMqttReconnectAttempt = millis();
+        Serial.print("🔄 Mencoba koneksi MQTT...");
+
+        // <<< PERUBAHAN 2: Gunakan metode connect yang benar untuk broker publik (tanpa user/pass)
+        // Versi lama salah: if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {
+        if (mqttClient.connect(mqtt_client_id)) {
+            Serial.println(" ✅ Terhubung!");
+            
+            // Subscribe ke topik-topik setelah berhasil terhubung
+            mqttClient.subscribe(TOPIC_LIGHTS_CONTROL);
+            mqttClient.subscribe(TOPIC_FAN_CONTROL);
+            mqttClient.subscribe(TOPIC_LOCK_CONTROL);
+            mqttClient.subscribe(TOPIC_RESPONSE);
+            Serial.println("📡 Berlangganan topik kontrol berhasil.");
+
+            // Kirim status online segera setelah terhubung
+            publishDeviceStatus();
+        } else {
+            Serial.printf(" ❌ Gagal, kode status: %d (mencoba lagi dalam 5s)\n", mqttClient.state());
+        }
+    }
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    Serial.println("\n--- Pesan MQTT Diterima ---");
+    Serial.print("   [TOPIC]: ");
+    Serial.println(topic);
+    String messageString = "";
+    for (int i = 0; i < length; i++) {
+        messageString += (char)payload[i];
+    }
+    Serial.print("   [PAYLOAD]: ");
+    Serial.println(messageString);
+    StaticJsonDocument<256> doc;
+    DeserializationError error = deserializeJson(doc, messageString);
+    if (error) {
+        Serial.printf("❌ [JSON]: Gagal parsing pesan: %s\n", error.f_str());
+        return;
+    }
+    handleControlCommands(topic, doc);
+    Serial.println("---------------------------");
+}
+
+// ============================================================================
+// COMMAND HANDLING FUNCTIONS
+// ============================================================================
+void handleControlCommands(const char* topic, JsonDocument& doc) {
+    const char* action = doc["action"];
+    if (!action) {
+        Serial.println("⚠️ [Kontrol]: Perintah 'action' tidak ditemukan dalam payload.");
+        return;
+    }
+    if (strcmp(topic, TOPIC_LIGHTS_CONTROL) == 0) handleLightControl(action);
+    else if (strcmp(topic, TOPIC_FAN_CONTROL) == 0) handleFanControl(action);
+    else if (strcmp(topic, TOPIC_LOCK_CONTROL) == 0) handleLockControl(action);
+    else if (strcmp(topic, TOPIC_RESPONSE) == 0) handleBackendResponse(doc);
+    else Serial.printf("❓ [Kontrol]: Topik tidak dikenal: %s\n", topic);
+}
+
+void handleLightControl(const char* action) {
+    if (strcmp(action, "on") == 0) {
+        digitalWrite(LIGHT_LED_PIN, HIGH);
+        Serial.println("💡 [Lampu]: Lampu menyala (Manual).");
+    } else if (strcmp(action, "off") == 0) {
+        digitalWrite(LIGHT_LED_PIN, LOW);
+        Serial.println("💡 [Lampu]: Lampu mati (Manual).");
+    }
+    lightAutoMode = false;
+}
+
+void handleFanControl(const char* action) {
+    if (strcmp(action, "on") == 0) {
+        digitalWrite(FAN_LED_PIN, HIGH);
+        Serial.println("🌀 [Kipas]: Kipas menyala (Manual).");
+    } else if (strcmp(action, "off") == 0) {
+        digitalWrite(FAN_LED_PIN, LOW);
+        Serial.println("🌀 [Kipas]: Kipas mati (Manual).");
+    }
+    fanAutoMode = false;
+}
+
+void handleLockControl(const char* action) {
+    if (strcmp(action, "lock") == 0) {
+        doorLock.write(90);
+        lockStatus = true;
+        Serial.println("🔒 [Kunci]: Pintu TERKUNCI (Perintah Remote).");
+    } else if (strcmp(action, "unlock") == 0) {
+        doorLock.write(0);
+        lockStatus = false;
+        Serial.println("🔓 [Kunci]: Pintu TIDAK TERKUNCI (Perintah Remote).");
+    }
+}
+
+void handleBackendResponse(JsonDocument& doc) {
+    bool success = doc["success"];
+    const char* message = doc["message"];
+    if (success) Serial.printf("✅ [Backend]: Sukses - %s\n", message ? message : "Tidak ada pesan.");
+    else {
+        const char* error = doc["error"];
+        Serial.printf("❌ [Backend]: Error - %s\n", error ? error : "Error tidak diketahui.");
+    }
+}
+
+// ============================================================================
+// SENSOR FUNCTIONS IMPLEMENTATION
+// ============================================================================
+void checkAllSensors() {
+    readMQ2GasSensor();
+    checkFireAlarmSystem();
+    readMotionSensors();
+    readClimateData();
+    controlFanByTemperature();
+}
+
+void readMQ2GasSensor() {
+    gasLevel = analogRead(MQ2_ANALOG_PIN);
+    gasVoltage = (gasLevel * 5.0) / 4095.0;
+    gasPercentage = map(gasLevel, 0, 4095, 0, 100);
+    digitalGasDetected = digitalRead(MQ2_DIGITAL_PIN);
+    gasPPM = (gasPercentage / 100.0) * 1000.0;
+}
+
+void checkFireAlarmSystem() {
+    bool fireDetected = (gasPercentage > 60) || (digitalGasDetected == HIGH);
+    if (fireDetected && !fireAlarmActive) {
+        fireAlarmActive = true;
+        digitalWrite(FIRE_LED_PIN, HIGH);
+        tone(BUZZER_PIN, 1000);
+        String alertMessage = "🔥 KRITIS: Gas terdeteksi! Level: " + String(gasPercentage) + "% (" + String(gasPPM, 1) + " PPM)";
+        publishAlert("fire_alarm", "critical", "🚨 ALARM KEBAKARAN AKTIF!", alertMessage.c_str());
+        Serial.println("\n🚨 ALARM KEBAKARAN AKTIF!");
+    } else if (!fireDetected && fireAlarmActive) {
+        fireAlarmActive = false;
+        digitalWrite(FIRE_LED_PIN, LOW);
+        noTone(BUZZER_PIN);
+        Serial.println("✅ Alarm kebakaran dinonaktifkan - level gas normal.");
+    }
+}
+
+void readMotionSensors() {
+  int currentDoorMotionState = digitalRead(PIR_DOOR_PIN);
+  if (currentDoorMotionState == HIGH && lastDoorMotionState == LOW) {
+    Serial.println("🎥 Gerakan PINTU terdeteksi!");
+    digitalWrite(CAMERA_LED_PIN, HIGH);
+    publishSecurityEvent("motion_door", "detected", "Pintu Depan");
+  }
+  else if (currentDoorMotionState == LOW && lastDoorMotionState == HIGH) {
+    Serial.println("🚪 Gerakan PINTU berhenti.");
+    digitalWrite(CAMERA_LED_PIN, LOW);
+    publishSecurityEvent("motion_door", "cleared", "Pintu Depan");
+  }
+  lastDoorMotionState = currentDoorMotionState;
+
+  int currentRoomMotionState = digitalRead(PIR_ROOM_PIN);
+  if (currentRoomMotionState == HIGH && lastRoomMotionState == LOW) {
+    Serial.println("👤 Gerakan di RUANGAN terdeteksi.");
+    publishSecurityEvent("motion_room", "detected", "Ruang Tengah");
+  }
+  else if (currentRoomMotionState == LOW && lastRoomMotionState == HIGH) {
+    Serial.println("🛋️ Gerakan di RUANGAN berhenti.");
+    publishSecurityEvent("motion_room", "cleared", "Ruang Tengah");
+  }
+  
+  if(currentRoomMotionState == HIGH) {
+    lastMotionTimeRoom = millis();
+  }
+  lastRoomMotionState = currentRoomMotionState;
+}
+
+void readClimateData() {
+    float newTemp = dht.readTemperature();
+    float newHumidity = dht.readHumidity();
+    if (!isnan(newTemp) && !isnan(newHumidity)) {
+        temperature = newTemp;
+        humidity = newHumidity;
+    } else {
+        Serial.println("⚠️ [DHT22]: Pembacaan sensor gagal.");
+    }
+}
+
+void controlFanByTemperature() {
+    if (!fanAutoMode) return;
+    if (temperature > 28.0) digitalWrite(FAN_LED_PIN, HIGH);
+    else if (temperature < 26.0) digitalWrite(FAN_LED_PIN, LOW);
+}
+
+// ============================================================================
+// AUTOMATION & TIME FUNCTIONS
+// ============================================================================
+void autoLightControl() {
+    if (!lightAutoMode) return;
+    bool isNightTime = (currentHour >= 18 || currentHour < 6);
+    digitalWrite(LIGHT_LED_PIN, isNightTime ? HIGH : LOW);
+}
+
+void checkEnergySavingMode() {
+    const unsigned long ENERGY_SAVE_DELAY = 120000;
+    if (millis() - lastMotionTimeRoom > ENERGY_SAVE_DELAY && (digitalRead(LIGHT_LED_PIN) == HIGH || digitalRead(FAN_LED_PIN) == HIGH)) {
+        digitalWrite(LIGHT_LED_PIN, LOW);
+        digitalWrite(FAN_LED_PIN, LOW);
+        publishAlert("energy_save", "low", "⚡ Mode Hemat Energi Aktif", ("Perangkat dimatikan karena tidak ada aktivitas pada " + currentTimeString).c_str());
+        Serial.println("⚡ Mode hemat energi aktif pada " + currentTimeString);
+    }
+}
+
+void setDS1307Time(byte second, byte minute, byte hour, byte dayOfWeek, byte dayOfMonth, byte month, byte year) {
+    Wire.beginTransmission(DS1307_I2C_ADDRESS);
+    Wire.write(0);
+    Wire.write(decToBcd(second));
+    Wire.write(decToBcd(minute));
+    Wire.write(decToBcd(hour));
+    Wire.write(decToBcd(dayOfWeek));
+    Wire.write(decToBcd(dayOfMonth));
+    Wire.write(decToBcd(month));
+    Wire.write(decToBcd(year));
+    Wire.endTransmission();
+}
+
+void readDS1307Time(int* hour, int* minute) {
+    Wire.beginTransmission(DS1307_I2C_ADDRESS);
+    Wire.write(0);
+    Wire.endTransmission();
+    Wire.requestFrom(DS1307_I2C_ADDRESS, 7);
+    byte second = bcdToDec(Wire.read() & 0x7f);
+    *minute = bcdToDec(Wire.read());
+    *hour = bcdToDec(Wire.read() & 0x3f);
+    Wire.read(); Wire.read(); Wire.read(); Wire.read();
+}
+
+void updateCurrentTime() {
+    readDS1307Time(&currentHour, &currentMinute);
+    String hourStr = (currentHour < 10) ? "0" + String(currentHour) : String(currentHour);
+    String minuteStr = (currentMinute < 10) ? "0" + String(currentMinute) : String(currentMinute);
+    currentTimeString = hourStr + ":" + minuteStr;
+}
+
+// ============================================================================
+// MQTT PUBLISHING FUNCTIONS
+// ============================================================================
+void publishSensorData() {
+    StaticJsonDocument<512> doc;
+    doc["device_id"] = mqtt_client_id; // <<< PASTIKAN MENGGUNAKAN ID YANG KONSISTEN
+    doc["timestamp"] = String(millis());
+    doc["time"] = currentTimeString;
+    doc["temperature"] = temperature;
+    doc["humidity"] = humidity;
+    doc["gas_level"] = gasLevel;
+    doc["gas_percentage"] = gasPercentage;
+    doc["gas_ppm"] = gasPPM;
+    doc["fire_alarm_active"] = fireAlarmActive;
+    doc["lock_status"] = lockStatus;
+    doc["light_on"] = digitalRead(LIGHT_LED_PIN);
+    doc["fan_on"] = digitalRead(FAN_LED_PIN);
+    doc["wifi_rssi"] = WiFi.RSSI();
+    doc["free_heap"] = ESP.getFreeHeap();
+    
+    char jsonBuffer[512];
+    serializeJson(doc, jsonBuffer);
+    mqttClient.publish(TOPIC_SENSORS, jsonBuffer);
+}
+
+void publishDeviceStatus() {
+    if (!mqttClient.connected()) return; // Jangan publish jika tidak terkoneksi
+    StaticJsonDocument<256> doc;
+    doc["device_id"] = mqtt_client_id; // <<< PASTIKAN MENGGUNAKAN ID YANG KONSISTEN
+    doc["status"] = "online";
+    doc["ip_address"] = WiFi.localIP().toString();
+    doc["wifi_rssi"] = WiFi.RSSI();
+    doc["free_heap"] = ESP.getFreeHeap();
+    doc["uptime_seconds"] = millis() / 1000;
+    doc["firmware_version"] = "1.3.1";
+    doc["time"] = currentTimeString;
+    
+    char jsonBuffer[256];
+    serializeJson(doc, jsonBuffer);
+    mqttClient.publish(TOPIC_STATUS, jsonBuffer);
+}
+
+void publishSecurityEvent(const char* eventType, const char* status, const char* location) {
+    if (!mqttClient.connected()) return;
+    StaticJsonDocument<256> doc;
+    doc["device_id"] = mqtt_client_id; // <<< PASTIKAN MENGGUNAKAN ID YANG KONSISTEN
+    doc["event_type"] = eventType;
+    doc["status"] = status;
+    doc["location"] = location;
+    doc["timestamp"] = millis();
+
+    char jsonBuffer[256];
+    serializeJson(doc, jsonBuffer);
+    mqttClient.publish(TOPIC_SECURITY, jsonBuffer);
+
+    Serial.printf("📤 Event Keamanan Dipublikasikan: { Tipe: %s, Status: %s, Lokasi: %s }\n", eventType, status, location);
+}
+
+void publishAlert(const char* alertType, const char* priority, const char* title, const char* message, JsonObject metadata) {
+    if (!mqttClient.connected()) return;
+    StaticJsonDocument<512> doc;
+    doc["device_id"] = mqtt_client_id; // <<< PASTIKAN MENGGUNAKAN ID YANG KONSISTEN
+    doc["alert_type"] = alertType;
+    doc["priority"] = priority;
+    doc["title"] = title;
+    doc["message"] = message;
+    doc["created_at"] = currentTimeString;
+    if (!metadata.isNull()) {
+        doc["metadata"] = metadata;
+    }
+    
+    char jsonBuffer[512];
+    serializeJson(doc, jsonBuffer);
+    mqttClient.publish(TOPIC_ALERTS, jsonBuffer);
+    Serial.printf("🚨 Alert dipublikasikan: %s - %s\n", alertType, title);
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+void initializePins() {
+    pinMode(MQ2_ANALOG_PIN, INPUT);
+    pinMode(MQ2_DIGITAL_PIN, INPUT);
+    pinMode(PIR_DOOR_PIN, INPUT);
+    pinMode(PIR_ROOM_PIN, INPUT);
+    pinMode(BUZZER_PIN, OUTPUT);
+    pinMode(FIRE_LED_PIN, OUTPUT);
+    pinMode(CAMERA_LED_PIN, OUTPUT);
+    pinMode(LIGHT_LED_PIN, OUTPUT);
+    pinMode(FAN_LED_PIN, OUTPUT);
+    digitalWrite(FIRE_LED_PIN, LOW);
+    digitalWrite(CAMERA_LED_PIN, LOW);
+    digitalWrite(LIGHT_LED_PIN, LOW);
+    digitalWrite(FAN_LED_PIN, LOW);
+}
+
+byte decToBcd(byte val) { return ((val / 10 * 16) + (val % 10)); }
+byte bcdToDec(byte val) { return ((val / 16 * 10) + (val % 16)); }

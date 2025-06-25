@@ -1,0 +1,13 @@
+# Wokwi Library List
+# See https://docs.wokwi.com/guides/libraries
+
+# Automatically added based on includes:
+DHT sensor library
+
+Blynk
+BlynkESP32_BT_WF
+ESP32Servo
+Time
+RTCDS1307
+PubSubClient
+ArduinoJson
