@@ -27,6 +27,8 @@ Project ini adalah sistem monitoring dan kontrol **Smart Home berbasis IoT** men
      - `mq2.chip.c`
 6. Pastikan kredensial MQTT di `sketch.ino` sudah benar (gunakan akun pribadi HiveMQ jika perlu)
 7. Jalankan Project dan pastikan ESP32 berhasil terhubung ke MQTT
+8. Wokwi anda seharusnya terlihat seperti ini setelah setup
+   ![wokwi_simulation](wokwi_files/wokwi.png)
 
 ---
 
