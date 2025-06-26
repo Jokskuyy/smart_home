@@ -1,0 +1,91 @@
+version: '3.8'
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: smarthome
+      MYSQL_USER: smarthome
+      MYSQL_PASSWORD: smarthome
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build: ./auth-service
+    ports:
+      - "4000:4000"
+    env_file:
+      - ./auth-service/.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  climate-service:
+    build: ./climate-service
+    ports:
+      - "4001:4001"
+    env_file:
+      - ./climate-service/.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  device-service:
+    build: ./device-service
+    ports:
+      - "4002:4002"
+    env_file:
+      - ./device-service/.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  sensor-service:
+    build: ./sensor-service
+    ports:
+      - "4003:4003"
+    env_file:
+      - ./sensor-service/.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  alerts-service:
+    build: ./alerts-service
+    ports:
+      - "4004:4004"
+    env_file:
+      - ./alerts-service/.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  control-service:
+    build: ./control-service
+    ports:
+      - "4005:4005"
+    env_file:
+      - ./control-service/.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  security-service:
+    build: ./security-service
+    ports:
+      - "4006:4006"
+    env_file:
+      - ./security-service/.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql_data: 

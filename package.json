@@ -2,10 +2,23 @@
   "dependencies": {
     "body-parser": "^2.2.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.5.0",
+    "dotenv": "^16.6.0",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "moment-timezone": "^0.6.0",
     "mqtt": "^5.13.1",
-    "mysql2": "^3.14.1"
-  }
+    "mysql2": "^3.14.1",
+    "sequelize": "^6.37.7"
+  },
+  "name": "testt",
+  "version": "1.0.0",
+  "description": "Project ini adalah sistem monitoring dan kontrol **Smart Home berbasis IoT** menggunakan **ESP32 (Wokwi Simulator)**, **MQTT**, **Node.js (Express)**, dan **MySQL**. Sistem ini menampilkan data sensor, memberikan notifikasi kebakaran/keamanan, serta mengontrol perangkat secara otomatis maupun manual dari dashboard web.",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
