@@ -1,17 +1,17 @@
-# 🏡 Smart Home IoT Dashboard
+# 🏡 Smart Home IoT Dashboard (Microservices Edition)
 
-Project ini adalah sistem monitoring dan kontrol **Smart Home berbasis IoT** menggunakan **ESP32 (Wokwi Simulator)**, **MQTT**, **Node.js (Express)**, dan **MySQL**. Sistem ini menampilkan data sensor, memberikan notifikasi kebakaran/keamanan, serta mengontrol perangkat secara otomatis maupun manual dari dashboard web.
+Sistem ini adalah implementasi **Smart Home berbasis IoT** dengan arsitektur **microservices** menggunakan **ESP32 (Wokwi Simulator)**, **MQTT**, **Node.js (Express)**, dan **MySQL**. Setiap layanan (service) berjalan secara terpisah untuk skalabilitas dan kemudahan pengelolaan.
 
 ---
 
 ## 🚀 Fitur Utama
 
-- Deteksi gas (MQ2), suhu dan kelembapan (DHT22), gerakan (PIR)
-- Sistem notifikasi otomatis: kebakaran & keamanan
-- Kontrol lampu, dan kipas (mode ON, OFF, AUTO)
-- Kontrol smart lock (LOCK, UNLOCK)
+- Deteksi gas (MQ2), suhu & kelembapan (DHT22), gerakan (PIR)
+- Notifikasi otomatis: kebakaran & keamanan
+- Kontrol lampu, kipas, dan smart lock (manual & otomatis)
 - Dashboard web real-time (HTML, CSS, JS)
-- Komunikasi data menggunakan **MQTT**
+- Komunikasi data via **MQTT**
+- Backend terpisah menjadi beberapa service (microservices)
 
 ---
 
@@ -20,45 +20,50 @@ Project ini adalah sistem monitoring dan kontrol **Smart Home berbasis IoT** men
 1. **Buat Project baru** di [Wokwi](https://wokwi.com/)
 2. Pilih **Board: ESP32 Dev Module**
 3. Pilih **Framework: Arduino**
-4. Upload file `sketch.ino`  dan `diagram.json` yang tersedia di repository
-5. Tambahkan **chip custom MQ2**:
-   - Buat dua file:
-     - `mq2.chip.json`
-     - `mq2.chip.c`
-6. Pastikan kredensial MQTT di `sketch.ino` sudah benar (gunakan akun pribadi HiveMQ jika perlu)
-7. Jalankan Project dan pastikan ESP32 berhasil terhubung ke MQTT
-8. Wokwi anda seharusnya terlihat seperti ini setelah setup
+4. Upload file `sketch.ino` dan `diagram.json` dari folder `wokwi_files/`
+5. Tambahkan **chip custom MQ2** (`mq2.chip.json` & `mq2.chip.c`)
+6. Pastikan kredensial MQTT di `sketch.ino` sudah benar
+7. Jalankan Project dan pastikan ESP32 terhubung ke MQTT
+8. Wokwi anda seharusnya terlihat seperti ini:
    ![wokwi_simulation](wokwi_files/wokwi.png)
 
 ---
 
-## 🖥️ Setup Backend (Node.js + Express)
+## 🖥️ Setup Backend (Microservices)
 
-### 1. Buat database MySQL
-```sql
-CREATE DATABASE smarthome_db;
-```
-### 2. Install dependencies
+### 1. Jalankan semua service & database dengan Docker Compose
+
 ```bash
-npm install express mysql2 dotenv cors
+docker-compose up --build
 ```
-### 3. Jalankan server
-```bash
-node server.js
-```
+
+- Ini akan menjalankan seluruh service berikut:
+  - **MySQL** (Database)
+  - **auth-service** (Autentikasi)
+  - **climate-service** (Suhu & kelembapan)
+  - **device-service** (Status perangkat)
+  - **sensor-service** (Sensor gas, PIR, dll)
+  - **alerts-service** (Notifikasi)
+  - **control-service** (Kontrol perangkat)
+  - **security-service** (Keamanan)
+  - **gateway** (API Gateway, port 8080)
+
+---
+
 ## 🌐 Setup Frontend (Dashboard)
 
-### 1. Buka file index.html menggunakan Live Server (VS Code Extension)
+1. Buka file `front-end/index.html` menggunakan Live Server (VS Code Extension) atau web server statis lain.
+2. Pastikan variabel `BASE_URL` di `front-end/script.js` mengarah ke alamat API Gateway, misal:
+   ```js
+   const BASE_URL = "http://localhost:8080";
+   ```
+   (Ubah jika port atau host berbeda)
+3. Dashboard akan menampilkan data sensor, notifikasi, dan kontrol perangkat secara real-time.
 
-### 2. Dashboard akan menampilkan:
-
-### - Data sensor secara real-time
-
-### - Notifikasi kebakaran dan keamanan terbaru
-
-### - Tombol kontrol lampu, kipas, dan pintu
+---
 
 ## ℹ️ Catatan Tambahan
 
-### - Project ini untuk keperluan tugas akhir mata kuliah Pembangunan Perangkat Lunak Berorientasi Service
-### - Kredensial MQTT disimpan langsung di sketch.ino dan .env
+- Semua konfigurasi environment untuk tiap service ada di folder masing-masing (`.env`).
+- Untuk development, pastikan port tidak bentrok dan semua service berjalan dengan benar.
+- Project ini untuk keperluan tugas akhir mata kuliah PPLBS.

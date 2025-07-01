@@ -87,5 +87,20 @@ services:
       mysql:
         condition: service_healthy
 
+  gateway:
+    build: ./gateway
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./gateway/.env
+    depends_on:
+      - auth-service
+      - climate-service
+      - device-service
+      - sensor-service
+      - alerts-service
+      - control-service
+      - security-service
+
 volumes:
   mysql_data: 
